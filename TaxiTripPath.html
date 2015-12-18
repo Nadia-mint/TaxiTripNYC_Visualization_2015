@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset=utf-8 />
+<title>Texi trip paths</title>
+<meta name='viewport' content='initial-scale=1,maximum-scale=1,user-scalable=no' />
+<script src='https://api.mapbox.com/mapbox.js/v2.2.3/mapbox.js'></script>
+<link href='https://api.mapbox.com/mapbox.js/v2.2.3/mapbox.css' rel='stylesheet' />
+<script src="https://ajax.googleapis.com/ajax/libs/jquery/1.11.3/jquery.min.js"></script>
+<!-- <script src="http://d3js.org/d3.v3.min.js"></script> -->
+<style>
+    body { margin:0; padding:0; }
+    #map { position:absolute; top:0; bottom:0; width:100%; }
+    .textLabelclass{
+        position: absolute;
+        right: 10%;
+        top: 7%;
+        white-space:nowrap;
+        font-size: 30px;
+        font-family: Georgia;
+        font-weight: 500;
+        text-shadow: 0 0 0.1em black, 0 0 0.1em black,
+        0 0 0.1em black,0 0 0.1em black,0 0 0.1em;
+        color: white;
+        transition: all 1s ease-in-out; 
+        white-space:pre;
+    }
+    /*
+    * The path-start class is added to each line
+    * to manage its animation - this interpolates
+    * between the starting and ending values for the
+    * stroke-dashoffset css property
+    */
+    .path-start {
+        -webkit-transition:stroke-dashoffset 1s ease-in;
+        -moz-transition:stroke-dashoffset 1s ease-in;
+        -o-transition:stroke-dashoffset 1s ease-in;
+        transition:stroke-dashoffset 1s ease-in;
+    }
+
+</style>
+</head>
+<body>
+
+
+<!-- We use arc.js to make our paths curved. -->
+<script src='https://api.mapbox.com/mapbox.js/plugins/arc.js/v0.1.0/arc.js'></script>
+<!-- This is our data file - it's an array of [[lat,lng],[lat,lng]] pairs
+     that define starting and ending locations of flight paths -->
+<!-- <script src='js/paths.js'></script> -->
+<script src='https://rawgit.com/Nadia-mint/TaxiTripNYC_Visualization_2015/master/paths.js'></script>
+
+<div id='map' class='dark'>Loading...</div>
+<div id='TimeStemp' class='textLabelclass'>2015-01-01  00:00:00 am</div>
+
+
+
+<script>
+L.mapbox.accessToken = 'pk.eyJ1IjoieGlhbmdsdSIsImEiOiJjaWhpNmdsb28wbWNydmJrbHRudG14NHhzIn0.HgNv42j-hKJ3YdTP39ZSkQ';
+// This is an advanced example that is compatible with
+// modern browsers and IE9+ - the trick it uses is animation
+// of SVG properties, which makes it relatively efficient for
+// the effect produced. That said, the same trick means that the
+// animation is non-geographical - lines interpolate in the same
+// amount of time regardless of trip length.
+
+// Show the whole world in this first view.
+map = L.mapbox.map('map', 'mapbox.dark', {
+        fadeAnimation: true
+    })
+    .setView([40.75, -73.95], 11);
+
+// Disable drag and zoom handlers.
+// Making this effect work with zooming and panning
+// would require a different technique with different
+// tradeoffs.
+//map.dragging.disable();
+map.touchZoom.disable();
+map.doubleClickZoom.disable();
+map.scrollWheelZoom.disable();
+if (map.tap) map.tap.disable();
+
+// Transform the short [lat,lng] format in our
+// data into the {x, y} expected by arc.js.
+function obj(ll) { return { y: ll[0], x: ll[1] }; }
+// function obj(arr) {
+//   var rv = {};
+//   for (var i = 0; i < arr.length; ++i)
+//     rv[i] = arr[i];
+//   return rv;
+// }
+
+//pairs = [[[40, -96.50], [42, -75.00]],[[0,1], [42, -75.00]],[[20,20], [42, -75.00]],[[50,-30], [42, -75.00]],[[-20,-80], [42, -75.00]]];
+
+
+var polylineArray = [];
+var polylines = L.layerGroup(polylineArray);
+polylines.addTo(map);
+
+
+var createLabelIcon = function(labelClass,labelText){
+  return L.divIcon({ 
+    className: labelClass,
+    html: labelText
+  })
+}
+function pad(num, size) {
+    var s = "0" + num;
+    return s.substr(s.length-size);
+}
+
+var hour = 0;
+// show the first overlay as soon as the map loads
+next();
+
+// and then time the next() function to run every 2 seconds
+setInterval(next, 1000 * 3);
+
+function next() {
+    hourToDisplay = hour==12?12:hour%12;
+    textToDisplay = "2015-01-01  " + pad(hourToDisplay,2) + ":00:00" + (hour>=12?"pm":" am");
+    $(function() {
+        $('#TimeStemp').fadeOut(1000, function() {
+            $(this).text(textToDisplay).fadeIn(1000);
+        });
+    });
+
+
+    map.removeLayer(polylines);
+    polylineArray = [];
+    pairs = paths[hour];
+    for (var i = 0; i < pairs.length; i++) {
+        // Transform each pair of coordinates into a pretty
+        // great circle using the Arc.js plugin, as included above.
+        var generator = new arc.GreatCircle(
+                obj(pairs[i][0]),
+                obj(pairs[i][1])
+                );
+        var line = generator.Arc(100, { offset: 10 });
+        // Leaflet expects [lat,lng] arrays, but a lot of
+        // software does the opposite, including arc.js, so
+        // we flip here.
+        var newLine = L.polyline(line.geometries[0].coords.map(function(c) {
+            return c.reverse();
+        }), {
+            color: '#ffe766',
+            weight: 0.5,
+            opacity: 0.7
+        });
+        //newLine.addTo(map);
+
+        polylineArray.push(newLine);
+    }
+    polylines = L.layerGroup(polylineArray);
+    polylines.addTo(map);
+    
+    // L.marker(new L.LatLng(40.8, -74.3), {icon:createLabelIcon("textLabelclass","Janauary 1st, 2015")}).addTo(map);
+    for (var i = 0; i < polylineArray.length; i++) {
+        var newLine = polylineArray[i];
+        var totalLength = newLine._path.getTotalLength();
+        newLine._path.classList.add('path-start');
+        // This pair of CSS properties hides the line initially
+        // See http://css-tricks.com/svg-line-animation-works/
+        // for details on this trick.
+        newLine._path.style.strokeDashoffset = totalLength;
+        newLine._path.style.strokeDasharray = totalLength;
+        // Offset the timeout here: setTimeout makes a function
+        // run after a certain number of milliseconds - in this
+        // case we want each flight path to be staggered a bit.
+        setTimeout((function(path) {
+            return function() {
+                // setting the strokeDashoffset to 0 triggers
+                // the animation.
+                path.style.strokeDashoffset = 0;
+            };
+        })(newLine._path), i * 1);
+    }
+	if (++hour >= paths.length) hour = 0;
+
+
+}
+
+
+</script>
+
+
+</body>
+</html>
